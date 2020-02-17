@@ -1,4 +1,3 @@
-from lex import *
 import re
 ID_compile = re.compile(r'^(.+)さん|くん|ちゃん|様|$')
 
@@ -7,20 +6,32 @@ class Int:
     def __init__(self, value):
         self.value = value
 
+    def conv(self):
+        return self.value
+
 
 class Str:
     def __init__(self, value):
         self.value = value
+
+    def conv(self):
+        return f'"{self.value}"'
 
 
 class List:
     def __init__(self, values):
         self.values = values
 
+    def conv(self):
+        return "[{}]".format(",".join(self.values))
+
 
 class ID:
     def __init__(self, value):
         self.value = value
+
+    def conv(self):
+        return self.value
 
 
 class Assign:
@@ -29,11 +40,25 @@ class Assign:
         self.name = name
         self.value = value
 
+    def conv(self):
+        return f'{self.name.conv()} = {self.value.conv()}'
+
 
 class Function:
     def __init__(self, func, value):
         self.func = func
         self.value = value
+
+    def conv(self):
+        return f"{self.func}({self.value.conv()})"
+
+
+class Formula:
+    def __init__(self, value):
+        self.value = value
+
+    def conv(self):
+        return self.value
 
 
 def get_all_child_phrases(phrase):
@@ -69,8 +94,8 @@ def join_tokens(tokens):
 class Parser:
     def __init__(self, lexed, expressions, variables):
         self.lexed = lexed
-        self.exp_list = expressions
-        self.var_list = variables
+        self.exp_list: list = expressions
+        self.var_list: list = variables
 
     def exp(self, value):
         joined = join_tokens(value)
@@ -81,9 +106,48 @@ class Parser:
         elif re.match(r'^\[.+\]$', joined):
             return self.list(re.match(r'^\[(.+)]$', joined).groups()[0])
         elif ID_compile.match(joined):
+            self.var_list.append(ID_compile.match(joined).groups()[0])
             return ID(ID_compile.match(joined).groups()[0])
+        else:
+            # 数式の場合 -> var_listに入っていない物と()と+-/*以外を取り除く
+            result = ""
+            while joined:
+                for key in self.var_list:
+                    if joined.startswith(key):
+                        result += key
+                        joined = joined.replace(key, "", 1)
+                        continue
+                if joined.startswith(" "):
+                    joined.lstrip(" ")
+                elif joined.startswith(('+', '-', '/', '*', '"', "'", '(', ')')):
+                    for l in ['+', '-', '/', '*', '"', "'", '(', ')']:
+                        if joined.startswith(l):
+                            result += l
+                            joined = joined.replace(l, "", 1)
+                elif re.match(r'([0-9]+).*', joined):
+                    match = re.match(r'([0-9]+).*', joined).group(1)
+                    result += match
+                    joined = joined.replace(match, "", 1)
+                elif re.match(r'(かける|掛ける).+', joined):
+                    match = re.match(r'(かける|掛ける).+', joined).group(1)
+                    result += "*"
+                    joined = joined.replace(match, "", 1)
+                elif re.match(r'(わる|割る).+', joined):
+                    match = re.match(r'(わる|割る).+', joined).group(1)
+                    result += "/"
+                    joined = joined.replace(match, "", 1)
+                elif re.match(r'(たす|足す).+', joined):
+                    match = re.match(r'(たす|足す).+', joined).group(1)
+                    result += "+"
+                    joined = joined.replace(match, "", 1)
+                elif re.match(r'(ひく|引く).+', joined):
+                    match = re.match(r'(ひく|引く).+', joined).group(1)
+                    result += "-"
+                    joined = joined.replace(match, "", 1)
+                else:
+                    joined = joined[1:]
 
-        return ''
+            return Formula(result)
 
     def assign(self, value):
         phrase = value.get_links('object')[0]
@@ -107,6 +171,8 @@ class Parser:
             if token[1].form in ('が', 'は') or token[1].pos == '名詞接尾辞':
                 continue
             text += token[1].form
+
+        self.var_list.append(text)
 
         return Assign(ID(text), exp)
 
@@ -144,4 +210,6 @@ class Parser:
         results = []
         for l in self.lexed:
             results.append(self.stmt(l))
+
+        return results
 

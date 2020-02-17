@@ -1,6 +1,5 @@
 import json
 import requests
-from pprint import pprint
 import re
 from lex import *
 from parsing import Parser
@@ -91,7 +90,7 @@ def parse_sentences(tokens):
 
         result += f'{s}。'
 
-    return text
+    return text, expressions
 
 
 def parse(access_token, text):
@@ -110,10 +109,3 @@ def parse(access_token, text):
     return j['result']
 
 
-if __name__ == '__main__':
-    access_token = get_access_token()
-    data, users = anaphoric(access_token, '太郎くんは花子さんを持ちました。')
-    # data, users = anaphoric(access_token, '山田くんは５を持ちました。\n山田くんを表示する。')
-    r = lexical(parse(access_token, parse_sentences(data)))
-    parser = Parser(r, expressions, users)
-    parser.parse()
